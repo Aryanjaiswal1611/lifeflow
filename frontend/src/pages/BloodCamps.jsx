@@ -3,13 +3,15 @@ import { useAuth } from '../context/AuthContext';
 import { campAPI } from '../services/api';
 import { bloodGroupColors } from '../utils/bloodGroups';
 import toast from 'react-hot-toast';
-import { BiCalendar, BiMapPin, BiUser, BiPhone, BiPlus, BiCheck, BiX } from 'react-icons/bi';
+import { BiCalendar, BiMapPin, BiUser, BiPhone, BiPlus, BiCheck, BiX, BiCurrentLocation } from 'react-icons/bi';
+import { useCurrentLocation } from '../hooks/useCurrentLocation';
 
 const BloodCamps = () => {
   const { user } = useAuth();
   const [camps, setCamps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('upcoming');
+  const [locationFilter, setLocationFilter] = useState({ city: '', lat: '', lng: '' });
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({
     campName: '', organizer: '', organizerContact: '', date: '', endDate: '',
@@ -72,12 +74,27 @@ const BloodCamps = () => {
     }));
   };
 
+  const { getCurrentLocation, locating } = useCurrentLocation();
+
+  const handleGetLocation = async () => {
+    const loc = await getCurrentLocation();
+    if (loc) {
+      setLocationFilter(prev => ({
+        ...prev,
+        city: loc.address?.city || '',
+        lat: loc.lat,
+        lng: loc.lng
+      }));
+    }
+  };
+
   const now = new Date();
   const upcomingCamps = camps.filter(c => new Date(c.date) >= now && c.status !== 'cancelled' && c.status !== 'completed');
   const activeCamps = camps.filter(c => c.status === 'active' || (new Date(c.date) <= now && new Date(c.endDate || c.date) >= now && c.status === 'approved'));
   const pastCamps = camps.filter(c => new Date(c.date) < now || c.status === 'completed' || c.status === 'cancelled');
 
-  const displayCamps = tab === 'upcoming' ? upcomingCamps : tab === 'active' ? activeCamps : pastCamps;
+  const displayCamps = (tab === 'upcoming' ? upcomingCamps : tab === 'active' ? activeCamps : pastCamps)
+    .filter(c => !locationFilter.city || c.city?.toLowerCase().includes(locationFilter.city.toLowerCase()));
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" /></div>;
@@ -90,9 +107,14 @@ const BloodCamps = () => {
           <h1 className="section-title mb-0">Blood Donation Camps</h1>
           <p className="text-gray-500 dark:text-gray-400">Find and register for blood donation camps near you</p>
         </div>
-        {(user?.role === 'hospital' || user?.role === 'admin') && (
-          <button onClick={() => setShowCreate(true)} className="btn-primary gap-2"><BiPlus size={20} /> Create Camp</button>
-        )}
+        <div className="flex gap-2">
+          <button onClick={handleGetLocation} className="btn-secondary gap-2" disabled={locating}>
+            <BiCurrentLocation size={18} /> {locating ? 'Locating...' : 'Near Me'}
+          </button>
+          {(user?.role === 'hospital' || user?.role === 'admin') && (
+            <button onClick={() => setShowCreate(true)} className="btn-primary gap-2"><BiPlus size={20} /> Create Camp</button>
+          )}
+        </div>
       </div>
 
       <div className="mb-6 flex gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">

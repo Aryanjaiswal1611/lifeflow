@@ -3,6 +3,7 @@ import { searchAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { BiSearch, BiDroplet, BiMapPin, BiPhone, BiFilter, BiCurrentLocation } from 'react-icons/bi';
 import { bloodGroups } from '../utils/bloodGroups';
+import { useCurrentLocation } from '../hooks/useCurrentLocation';
 
 const Search = () => {
   const [filters, setFilters] = useState({
@@ -12,6 +13,7 @@ const Search = () => {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const { getCurrentLocation: getLocFromHook, locating } = useCurrentLocation();
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -28,12 +30,15 @@ const Search = () => {
     }
   };
 
-  const getLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setFilters(prev => ({ ...prev, lat: pos.coords.latitude, lng: pos.coords.longitude })),
-        () => toast.error('Location access denied')
-      );
+  const getLocation = async () => {
+    const loc = await getLocFromHook();
+    if (loc) {
+      setFilters(prev => ({
+        ...prev,
+        lat: loc.lat,
+        lng: loc.lng,
+        city: loc.address?.city || prev.city
+      }));
     }
   };
 

@@ -31,12 +31,16 @@ const HospitalFinder = () => {
     }
   };
 
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) { toast.error('Geolocation not supported'); return; }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setFilters(prev => ({ ...prev, lat: pos.coords.latitude, lng: pos.coords.longitude })),
-      () => toast.error('Could not get location')
-    );
+  const handleGetLocation = async () => {
+    const loc = await getCurrentLocation();
+    if (loc) {
+      setFilters(prev => ({
+        ...prev,
+        lat: loc.lat,
+        lng: loc.lng,
+        city: loc.address?.city || prev.city
+      }));
+    }
   };
 
   return (
@@ -71,7 +75,9 @@ const HospitalFinder = () => {
               {loading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <BiSearch size={18} />}
               {filters.type === 'hospital' ? 'Find Hospitals' : 'Find Blood Banks'}
             </button>
-            <button type="button" onClick={handleGetLocation} className="btn-secondary gap-2"><BiCurrentLocation size={18} /> Use My Location</button>
+            <button type="button" onClick={handleGetLocation} className="btn-secondary gap-2" disabled={locating}>
+              <BiCurrentLocation size={18} /> {locating ? 'Getting Location...' : 'Use My Location'}
+            </button>
           </div>
         </form>
       </div>
@@ -137,4 +143,14 @@ const HospitalFinder = () => {
                   {(place.lat && place.lng) && (
                     <a href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`} target="_blank" rel="noopener noreferrer" className="btn-secondary gap-1 flex-1 text-xs"><BiMapPin /> Navigate</a>
                   )}
-                <
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default HospitalFinder;

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { mapAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { BiCurrentLocation, BiDroplet, BiBuilding, BiMap, BiFilter } from 'react-icons/bi';
+import { useCurrentLocation } from '../hooks/useCurrentLocation';
 
 const NearbyMap = () => {
   const [tab, setTab] = useState('donors');
@@ -12,14 +13,14 @@ const NearbyMap = () => {
   const [bloodFilter, setBloodFilter] = useState('');
   const [distance, setDistance] = useState(50);
   const [selected, setSelected] = useState(null);
+  const { getCurrentLocation, locating } = useCurrentLocation();
 
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => toast.error('Location access denied. Enable location for nearby results.')
-      );
-    }
+    const init = async () => {
+      const loc = await getCurrentLocation();
+      if (loc) setLocation({ lat: loc.lat, lng: loc.lng });
+    };
+    init();
   }, []);
 
   const searchNearby = async () => {

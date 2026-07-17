@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { BiError, BiMap, BiPhone, BiCheckCircle, BiDroplet, BiBuilding } from 'react-icons/bi';
 import { bloodGroups, bloodGroupColors } from '../utils/bloodGroups';
 import { useNavigate } from 'react-router-dom';
+import { useCurrentLocation } from '../hooks/useCurrentLocation';
 
 const EmergencySOS = () => {
   const navigate = useNavigate();
@@ -15,13 +16,12 @@ const EmergencySOS = () => {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [result, setResult] = useState(null);
+  const { getCurrentLocation, locating } = useCurrentLocation();
 
-  const getLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setForm(prev => ({ ...prev, lat: pos.coords.latitude, lng: pos.coords.longitude })),
-        () => toast.error('Enable location for faster response')
-      );
+  const getLocation = async () => {
+    const loc = await getCurrentLocation();
+    if (loc) {
+      setForm(prev => ({ ...prev, lat: loc.lat, lng: loc.lng }));
     }
   };
 
@@ -160,7 +160,9 @@ const EmergencySOS = () => {
               <label className="label">Location</label>
               <div className="flex gap-2">
                 <input value={form.lat ? `${form.lat}, ${form.lng}` : ''} className="input-field flex-1" placeholder="Click Get Location" readOnly />
-                <button type="button" onClick={getLocation} className="btn-secondary px-3"><BiMap size={20} /></button>
+                <button type="button" onClick={getLocation} className="btn-secondary px-3" disabled={locating}>
+                  <BiMap size={20} /> {locating ? '...' : ''}
+                </button>
               </div>
             </div>
             <div>
