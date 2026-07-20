@@ -56,12 +56,10 @@ const BloodAvailability = () => {
   useEffect(() => {
     if (debouncedQuery) {
       const params = { query: debouncedQuery, type: filters.type };
-      if (filters.lat) params.lat = filters.lat;
-      if (filters.lng) params.lng = filters.lng;
-      if (filters.lat) params.radius = filters.radius;
+      if (filters.lat) { params.lat = filters.lat; params.lng = filters.lng; params.radius = filters.radius; }
       performSearch(params);
     }
-  }, [debouncedQuery, performSearch]);
+  }, [debouncedQuery, performSearch, filters.type, filters.lat, filters.lng, filters.radius]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();

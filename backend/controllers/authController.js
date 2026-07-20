@@ -218,7 +218,19 @@ const resetPassword = async (req, res) => {
 
 const googleAuth = async (req, res) => {
   try {
-    const { email, name, googleId, avatar } = req.body;
+    const { email, name, googleId, avatar, accessToken } = req.body;
+
+    if (accessToken) {
+      try {
+        const verifyRes = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${accessToken}`);
+        if (!verifyRes.ok) {
+          return res.status(401).json({ message: 'Invalid Google token' });
+        }
+      } catch (verifyErr) {
+        return res.status(401).json({ message: 'Google token verification failed' });
+      }
+    }
+
     let user = await User.findOne({ email });
     if (user) {
       if (!user.googleId) {

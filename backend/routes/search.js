@@ -55,6 +55,7 @@ router.get('/', protect, async (req, res) => {
 
     res.json({ donors, hospitals });
   } catch (error) {
+    console.error('Search error:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -64,89 +65,43 @@ router.get('/places', protect, async (req, res) => {
     const { query, city, pincode, lat, lng, radius, type } = req.query;
     const maxDist = parseFloat(radius || 20);
 
-    let searchFilter = { isVerified: true };
-
-    if (query) {
-      const trimmed = query.trim();
-      searchFilter.$or = [
-        { city: { $regex: trimmed, $options: 'i' } },
-        { name: { $regex: trimmed, $options: 'i' } },
-        { hospitalName: { $regex: trimmed, $options: 'i' } },
-        { address: { $regex: trimmed, $options: 'i' } },
-        { pincode: { $regex: `^${trimmed.replace(/\s/g, '')}`, $options: 'i' } }
-      ];
-    } else if (city) {
-      searchFilter.city = { $regex: city.trim(), $options: 'i' };
-    }
-
-    if (pincode) {
-      delete searchFilter.$or;
-      delete searchFilter.city;
-      searchFilter.pincode = pincode.trim();
-    }
-
-    if (searchFilter.$or && searchFilter.$or.length === 0) {
-      delete searchFilter.$or;
+    if (!query && !city && !pincode && !lat && !lng) {
+      return res.json({ bloodBanks: [], hospitals: [] });
     }
 
     let bloodBanks = [];
     let hospitals = [];
 
+    const searchStr = (query || city || '').trim();
+    const searchRegex = searchStr
+      ? new RegExp(searchStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+      : null;
+
     if (!type || type === 'all' || type === 'bloodbank') {
-      const bbFilter = { ...searchFilter };
-      if (bbFilter.$or) {
-        bbFilter.$or = bbFilter.$or.map(cond => {
-          const newCond = {};
-          for (const [key, val] of Object.entries(cond)) {
-            if (key === 'hospitalName') {
-              newCond.name = val;
-            } else {
-              newCond[key] = val;
-            }
-          }
-          return newCond;
-        });
-      } else if (searchFilter.hospitalName) {
-        bbFilter.name = searchFilter.hospitalName;
-        delete bbFilter.hospitalName;
+      const bbQuery = {};
+      if (searchRegex) {
+        bbQuery.$or = [
+          { city: searchRegex },
+          { name: searchRegex },
+          { address: searchRegex }
+        ];
       }
-      bloodBanks = await BloodBank.find(bbFilter).lean();
+      if (pincode) bbQuery.pincode = pincode.trim();
+      bloodBanks = await BloodBank.find(bbQuery).lean();
     }
 
     if (!type || type === 'all' || type === 'hospital') {
-      const hFilter = { ...searchFilter };
-      if (hFilter.$or) {
-        hFilter.$or = hFilter.$or.map(cond => {
-          const newCond = {};
-          for (const [key, val] of Object.entries(cond)) {
-            if (key === 'name') {
-              newCond.hospitalName = val;
-            } else {
-              newCond[key] = val;
-            }
-          }
-          return newCond;
-        });
-      } else if (searchFilter.name) {
-        hFilter.hospitalName = searchFilter.name;
-        delete hFilter.name;
+      const hQuery = {};
+      if (searchRegex) {
+        hQuery.$or = [
+          { city: searchRegex },
+          { hospitalName: searchRegex },
+          { address: searchRegex }
+        ];
       }
-      hospitals = await Hospital.find(hFilter).populate('user', 'name email phone').lean();
+      if (pincode) hQuery.pincode = pincode.trim();
+      hospitals = await Hospital.find(hQuery).populate('user', 'name email phone').lean();
     }
-
-    const seen = new Set();
-    bloodBanks = bloodBanks.filter(b => {
-      const key = b._id.toString();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    hospitals = hospitals.filter(h => {
-      const key = h._id.toString();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
 
     if (lat && lng) {
       const userLat = parseFloat(lat);
@@ -165,6 +120,7 @@ router.get('/places', protect, async (req, res) => {
 
     res.json({ bloodBanks, hospitals });
   } catch (error) {
+    console.error('Search places error:', error);
     res.status(500).json({ message: error.message });
   }
 });

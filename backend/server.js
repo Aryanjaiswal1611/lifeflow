@@ -31,6 +31,9 @@ const availabilityRoutes = require('./routes/availability');
 const blogRoutes = require('./routes/blogs');
 const { seedSampleCamps } = require('./controllers/campController');
 const seedBlogs = require('./utils/seedBlogs');
+const seedLocations = require('./utils/seedLocations');
+const BloodBank = require('./models/BloodBank');
+const Hospital = require('./models/Hospital');
 
 const app = express();
 const server = http.createServer(app);
@@ -58,6 +61,23 @@ const authLimiter = rateLimit({
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'LifeFlow API is running' });
+});
+
+app.get('/api/debug/data', async (req, res) => {
+  try {
+    const bloodBankCount = await BloodBank.countDocuments();
+    const hospitalCount = await Hospital.countDocuments();
+    const userCount = await require('./models/User').countDocuments();
+    const sampleBB = await BloodBank.find().limit(3).lean();
+    const sampleHosp = await Hospital.find().limit(3).lean();
+    res.json({
+      counts: { bloodBanks: bloodBankCount, hospitals: hospitalCount, users: userCount },
+      sampleBloodBanks: sampleBB.map(b => ({ name: b.name, city: b.city })),
+      sampleHospitals: sampleHosp.map(h => ({ name: h.hospitalName, city: h.city }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.use('/api/auth', authLimiter, authRoutes);
@@ -88,6 +108,7 @@ const PORT = process.env.PORT || 5000;
 connectDB().then(() => {
   seedSampleCamps().catch(err => console.error('Seed camps error:', err.message));
   seedBlogs().catch(err => console.error('Seed blogs error:', err.message));
+  seedLocations().catch(err => console.error('Seed locations error:', err.message));
   server.listen(PORT, () => {
     console.log(`LifeFlow server running on port ${PORT}`);
   });
