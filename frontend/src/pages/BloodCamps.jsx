@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { campAPI } from '../services/api';
 import { bloodGroupColors } from '../utils/bloodGroups';
 import toast from 'react-hot-toast';
 import { BiCalendar, BiMapPin, BiUser, BiPhone, BiPlus, BiCheck, BiX, BiCurrentLocation } from 'react-icons/bi';
-import { useCurrentLocation } from '../hooks/useCurrentLocation';
+import useLocation from '../hooks/useLocation';
 
 const BloodCamps = () => {
   const { user } = useAuth();
@@ -13,6 +13,9 @@ const BloodCamps = () => {
   const [tab, setTab] = useState('upcoming');
   const [locationFilter, setLocationFilter] = useState({ city: '', lat: '', lng: '' });
   const [showCreate, setShowCreate] = useState(false);
+  const [locationStatus, setLocationStatus] = useState('idle');
+  const locationTimerRef = useRef(null);
+  const { city: locCity, loading: locLoading, error: locError, getLocation, resetLocation } = useLocation();
   const [form, setForm] = useState({
     campName: '', organizer: '', organizerContact: '', date: '', endDate: '',
     time: '', address: '', city: '', state: '', pincode: '',
@@ -29,7 +32,6 @@ const BloodCamps = () => {
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to load camps';
       toast.error(msg);
-      console.error('loadCamps error:', err);
     } finally {
       setLoading(false);
     }
@@ -74,17 +76,29 @@ const BloodCamps = () => {
     }));
   };
 
-  const { getCurrentLocation, locating } = useCurrentLocation();
+  const getLocationButtonText = () => {
+    if (locLoading) return 'Detecting Location...';
+    if (locationStatus === 'success') return 'Location Detected \u2713';
+    if (locationStatus === 'error' || locError) return 'Retry';
+    return 'Near Me';
+  };
 
   const handleGetLocation = async () => {
-    const loc = await getCurrentLocation();
+    resetLocation();
+    setLocationStatus('detecting');
+    const loc = await getLocation();
     if (loc) {
+      setLocationStatus('success');
       setLocationFilter(prev => ({
         ...prev,
-        city: loc.address?.city || '',
-        lat: loc.lat,
-        lng: loc.lng
+        city: loc.city || '',
+        lat: loc.latitude,
+        lng: loc.longitude
       }));
+      if (locationTimerRef.current) clearTimeout(locationTimerRef.current);
+      locationTimerRef.current = setTimeout(() => setLocationStatus('idle'), 3000);
+    } else {
+      setLocationStatus('error');
     }
   };
 
@@ -107,12 +121,21 @@ const BloodCamps = () => {
           <h1 className="section-title mb-0">Blood Donation Camps</h1>
           <p className="text-gray-500 dark:text-gray-400">Find and register for blood donation camps near you</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleGetLocation} className="btn-secondary gap-2" disabled={locating}>
-            <BiCurrentLocation size={18} /> {locating ? 'Locating...' : 'Near Me'}
-          </button>
-          {(user?.role === 'hospital' || user?.role === 'admin') && (
-            <button onClick={() => setShowCreate(true)} className="btn-primary gap-2"><BiPlus size={20} /> Create Camp</button>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex gap-2">
+            <button onClick={handleGetLocation} className={`btn-secondary gap-2 ${locLoading ? 'opacity-70 cursor-not-allowed' : ''} ${locationStatus === 'success' ? 'border-green-500 text-green-600 dark:text-green-400' : locError ? 'border-red-400 text-red-600 dark:text-red-400' : ''}`} disabled={locLoading}>
+              {locLoading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : locationStatus === 'success' ? <BiCheck size={18} /> : <BiCurrentLocation size={18} />}
+              {getLocationButtonText()}
+            </button>
+            {(user?.role === 'hospital' || user?.role === 'admin') && (
+              <button onClick={() => setShowCreate(true)} className="btn-primary gap-2"><BiPlus size={20} /> Create Camp</button>
+            )}
+          </div>
+          {locError && locationStatus === 'error' && (
+            <p className="text-xs text-red-500 dark:text-red-400 text-right">{locError}</p>
+          )}
+          {locationStatus === 'success' && locCity && (
+            <p className="text-xs text-green-600 dark:text-green-400">Location detected: {locCity}</p>
           )}
         </div>
       </div>

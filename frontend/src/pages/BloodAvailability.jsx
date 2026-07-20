@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { availabilityAPI } from '../services/api';
 import { bloodGroups, bloodGroupColors } from '../utils/bloodGroups';
 import toast from 'react-hot-toast';
-import { BiSearch, BiCurrentLocation, BiPhone, BiMapPin, BiDroplet, BiFilter } from 'react-icons/bi';
-import { useCurrentLocation } from '../hooks/useCurrentLocation';
+import { BiSearch, BiCurrentLocation, BiPhone, BiMapPin, BiDroplet, BiFilter, BiCheck } from 'react-icons/bi';
+import useLocation from '../hooks/useLocation';
 
 const BloodAvailability = () => {
   const [filters, setFilters] = useState({ bloodGroup: '', city: '', radius: 50, type: 'all' });
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const { getCurrentLocation, locating } = useCurrentLocation();
+  const [locationStatus, setLocationStatus] = useState('idle');
+  const locationTimerRef = useRef(null);
+  const { city: locCity, loading: locLoading, error: locError, getLocation, resetLocation } = useLocation();
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -28,15 +30,38 @@ const BloodAvailability = () => {
   };
 
   const handleGetLocation = async () => {
-    const loc = await getCurrentLocation();
+    resetLocation();
+    setLocationStatus('detecting');
+    const loc = await getLocation();
     if (loc) {
-      setFilters(prev => ({
-        ...prev,
-        lat: loc.lat,
-        lng: loc.lng,
-        city: loc.address?.city || prev.city
-      }));
+      setLocationStatus('success');
+      const newCity = loc.city || filters.city;
+      setFilters(prev => ({ ...prev, lat: loc.latitude, lng: loc.longitude, city: newCity }));
+      if (filters.bloodGroup) {
+        setLoading(true);
+        setSearched(true);
+        try {
+          const searchFilters = { ...filters, city: newCity, lat: loc.latitude, lng: loc.longitude };
+          const res = await availabilityAPI.search(searchFilters);
+          setResults(res.data);
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Search failed');
+        } finally {
+          setLoading(false);
+        }
+      }
+      if (locationTimerRef.current) clearTimeout(locationTimerRef.current);
+      locationTimerRef.current = setTimeout(() => setLocationStatus('idle'), 3000);
+    } else {
+      setLocationStatus('error');
     }
+  };
+
+  const getLocationButtonText = () => {
+    if (locLoading) return 'Detecting Location...';
+    if (locationStatus === 'success') return 'Location Detected \u2713';
+    if (locationStatus === 'error' || locError) return 'Retry Location';
+    return 'Use My Location';
   };
 
   return (
@@ -80,10 +105,17 @@ const BloodAvailability = () => {
               {loading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <BiSearch size={18} />}
               Search Availability
             </button>
-            <button type="button" onClick={handleGetLocation} className="btn-secondary gap-2" disabled={locating}>
-              <BiCurrentLocation size={18} /> {locating ? 'Getting Location...' : 'Use My Location'}
+            <button type="button" onClick={handleGetLocation} className={`btn-secondary gap-2 ${locLoading ? 'opacity-70 cursor-not-allowed' : ''} ${locationStatus === 'success' ? 'border-green-500 text-green-600 dark:text-green-400' : locError ? 'border-red-400 text-red-600 dark:text-red-400' : ''}`} disabled={locLoading}>
+              {locLoading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : locationStatus === 'success' ? <BiCheck size={18} /> : <BiCurrentLocation size={18} />}
+              {getLocationButtonText()}
             </button>
           </div>
+          {locError && locationStatus === 'error' && (
+            <p className="mt-3 text-sm text-red-500 dark:text-red-400">{locError}</p>
+          )}
+          {locationStatus === 'success' && locCity && (
+            <p className="mt-3 text-sm text-green-600 dark:text-green-400">Location detected: {locCity}</p>
+          )}
         </form>
       </div>
 

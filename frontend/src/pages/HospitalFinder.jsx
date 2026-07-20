@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { bloodBankAPI } from '../services/api';
 import { bloodGroupColors } from '../utils/bloodGroups';
 import toast from 'react-hot-toast';
-import { BiSearch, BiCurrentLocation, BiPhone, BiMapPin, BiBuilding } from 'react-icons/bi';
-import { useCurrentLocation } from '../hooks/useCurrentLocation';
+import { BiSearch, BiCurrentLocation, BiPhone, BiMapPin, BiBuilding, BiCheck } from 'react-icons/bi';
+import useLocation from '../hooks/useLocation';
 
 const HospitalFinder = () => {
   const [filters, setFilters] = useState({ city: '', radius: 50, type: 'hospital' });
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const { getCurrentLocation, locating } = useCurrentLocation();
+  const [locationStatus, setLocationStatus] = useState('idle');
+  const locationTimerRef = useRef(null);
+  const { city: locCity, loading: locLoading, error: locError, getLocation, resetLocation } = useLocation();
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -32,15 +34,49 @@ const HospitalFinder = () => {
   };
 
   const handleGetLocation = async () => {
-    const loc = await getCurrentLocation();
+    resetLocation();
+    setLocationStatus('detecting');
+    const loc = await getLocation();
     if (loc) {
+      setLocationStatus('success');
       setFilters(prev => ({
         ...prev,
-        lat: loc.lat,
-        lng: loc.lng,
-        city: loc.address?.city || prev.city
+        lat: loc.latitude,
+        lng: loc.longitude,
+        city: loc.city || prev.city
       }));
+      setLoading(true);
+      setSearched(true);
+      try {
+        const params = { city: loc.city || '', radius: filters.radius, type: filters.type };
+        if (loc.latitude && loc.longitude) {
+          params.lat = loc.latitude;
+          params.lng = loc.longitude;
+        }
+        let res;
+        if (params.type === 'bloodbank') {
+          res = await bloodBankAPI.getNearby(params);
+        } else {
+          res = await bloodBankAPI.getNearby({ ...params, type: 'hospital' });
+        }
+        setResults(Array.isArray(res.data) ? res.data : res.data.results || res.data.places || []);
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Search failed');
+      } finally {
+        setLoading(false);
+      }
+      if (locationTimerRef.current) clearTimeout(locationTimerRef.current);
+      locationTimerRef.current = setTimeout(() => setLocationStatus('idle'), 3000);
+    } else {
+      setLocationStatus('error');
     }
+  };
+
+  const getLocationButtonText = () => {
+    if (locLoading) return 'Detecting Location...';
+    if (locationStatus === 'success') return 'Location Detected \u2713';
+    if (locationStatus === 'error' || locError) return 'Retry Location';
+    return 'Use My Location';
   };
 
   return (
@@ -75,10 +111,17 @@ const HospitalFinder = () => {
               {loading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <BiSearch size={18} />}
               {filters.type === 'hospital' ? 'Find Hospitals' : 'Find Blood Banks'}
             </button>
-            <button type="button" onClick={handleGetLocation} className="btn-secondary gap-2" disabled={locating}>
-              <BiCurrentLocation size={18} /> {locating ? 'Getting Location...' : 'Use My Location'}
+            <button type="button" onClick={handleGetLocation} className={`btn-secondary gap-2 ${locLoading ? 'opacity-70 cursor-not-allowed' : ''} ${locationStatus === 'success' ? 'border-green-500 text-green-600 dark:text-green-400' : locError ? 'border-red-400 text-red-600 dark:text-red-400' : ''}`} disabled={locLoading}>
+              {locLoading ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : locationStatus === 'success' ? <BiCheck size={18} /> : <BiCurrentLocation size={18} />}
+              {getLocationButtonText()}
             </button>
           </div>
+          {locError && locationStatus === 'error' && (
+            <p className="mt-3 text-sm text-red-500 dark:text-red-400">{locError}</p>
+          )}
+          {locationStatus === 'success' && locCity && (
+            <p className="mt-3 text-sm text-green-600 dark:text-green-400">Location detected: {locCity}</p>
+          )}
         </form>
       </div>
 
