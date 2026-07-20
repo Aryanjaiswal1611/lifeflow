@@ -3,14 +3,16 @@ import { useAuth } from '../context/AuthContext';
 import { campAPI } from '../services/api';
 import { bloodGroupColors } from '../utils/bloodGroups';
 import toast from 'react-hot-toast';
-import { BiCalendar, BiMapPin, BiUser, BiPhone, BiPlus, BiCheck, BiX, BiCurrentLocation } from 'react-icons/bi';
+import { BiCalendar, BiMapPin, BiUser, BiPhone, BiPlus, BiCheck, BiX, BiCurrentLocation, BiSearch } from 'react-icons/bi';
 import useLocation from '../hooks/useLocation';
+import { CardSkeleton } from '../components/common/LoadingSkeleton';
 
 const BloodCamps = () => {
   const { user } = useAuth();
   const [camps, setCamps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('upcoming');
+  const [searchQuery, setSearchQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState({ city: '', lat: '', lng: '' });
   const [showCreate, setShowCreate] = useState(false);
   const [locationStatus, setLocationStatus] = useState('idle');
@@ -89,6 +91,7 @@ const BloodCamps = () => {
     const loc = await getLocation();
     if (loc) {
       setLocationStatus('success');
+      setSearchQuery(loc.city || '');
       setLocationFilter(prev => ({
         ...prev,
         city: loc.city || '',
@@ -102,16 +105,40 @@ const BloodCamps = () => {
     }
   };
 
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    setLocationFilter(prev => ({ ...prev, city: val }));
+  };
+
   const now = new Date();
   const upcomingCamps = camps.filter(c => new Date(c.date) >= now && c.status !== 'cancelled' && c.status !== 'completed');
   const activeCamps = camps.filter(c => c.status === 'active' || (new Date(c.date) <= now && new Date(c.endDate || c.date) >= now && c.status === 'approved'));
   const pastCamps = camps.filter(c => new Date(c.date) < now || c.status === 'completed' || c.status === 'cancelled');
 
-  const displayCamps = (tab === 'upcoming' ? upcomingCamps : tab === 'active' ? activeCamps : pastCamps)
-    .filter(c => !locationFilter.city || c.city?.toLowerCase().includes(locationFilter.city.toLowerCase()));
+  const filterBySearch = (campList) => {
+    if (!searchQuery.trim()) return campList;
+    const q = searchQuery.trim().toLowerCase();
+    return campList.filter(c =>
+      (c.city || '').toLowerCase().includes(q) ||
+      (c.campName || '').toLowerCase().includes(q) ||
+      (c.address || '').toLowerCase().includes(q) ||
+      (c.organizer || '').toLowerCase().includes(q)
+    );
+  };
+
+  const displayCamps = filterBySearch(
+    tab === 'upcoming' ? upcomingCamps : tab === 'active' ? activeCamps : pastCamps
+  ).filter(c => !locationFilter.city || c.city?.toLowerCase().includes(locationFilter.city.toLowerCase()));
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-200 border-t-primary-600" /></div>;
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map(i => <CardSkeleton key={i} />)}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -140,16 +167,38 @@ const BloodCamps = () => {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1 max-w-md">
+          <BiSearch size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={searchQuery}
+            onChange={handleSearchChange}
+            className="input-field pl-10"
+            placeholder="Search camps by city, name, or organizer..."
+          />
+        </div>
+      </div>
+
       <div className="mb-6 flex gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
         {['upcoming', 'active', 'past'].map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`tab-btn flex-1 capitalize ${tab === t ? 'tab-active' : 'tab-inactive'}`}>{t} {t === 'upcoming' ? `(${upcomingCamps.length})` : t === 'active' ? `(${activeCamps.length})` : `(${pastCamps.length})`}</button>
+          <button key={t} onClick={() => setTab(t)} className={`tab-btn flex-1 capitalize ${tab === t ? 'tab-active' : 'tab-inactive'}`}>
+            {t}
+            <span className="ml-1 text-xs opacity-70">
+              ({t === 'upcoming' ? upcomingCamps.length : t === 'active' ? activeCamps.length : pastCamps.length})
+            </span>
+          </button>
         ))}
       </div>
 
       {displayCamps.length === 0 ? (
         <div className="card py-16 text-center">
           <BiCalendar size={48} className="mx-auto mb-4 text-gray-300" />
-          <p className="text-gray-500 dark:text-gray-400">No {tab} camps found</p>
+          <p className="text-lg font-medium text-gray-500 dark:text-gray-400">No {tab} camps found</p>
+          <p className="mt-2 text-sm text-gray-400">
+            {searchQuery.trim()
+              ? `No camps matching "${searchQuery.trim()}". Try a different search term.`
+              : `There are no ${tab} blood donation camps available at the moment.`}
+          </p>
         </div>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

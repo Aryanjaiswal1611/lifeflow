@@ -103,7 +103,8 @@ export const callAPI = {
 };
 
 export const searchAPI = {
-  search: (params) => API.get('/search', { params })
+  search: (params) => API.get('/search', { params }),
+  searchPlaces: (params) => API.get('/search/places', { params })
 };
 
 export const rewardAPI = {
